@@ -1,0 +1,82 @@
+{
+    "tile_process": {
+	"tile_size": [4000, 4000],
+	"WSIs": {
+	    "root_path": "/data/tcga_data/tumor/brca",
+	    "output_path": "/data/shared/huidong/BMI_project/brca_data/WSIs_patches"
+	},
+	"Nuclei_segs": {
+	    "root_path": "/data02/shared/tcga_analysis/brca_analysis/brca_prob",
+	    "output_path": "/data02/shared/huidong/BMI_project/brca_data/Nuclei_segs/brca_prob"
+	},
+	"Tumor_preds": {
+	    "root_path": "/data01/shared/hanle/tumor_project/pub_tumor_cancer_brca/Cancer_heatmap_tcga_seer_v1",
+	    "output_path": ["/data02/shared/huidong/BMI_project/brca_data/Tumor_preds_intp",
+			    "/data04/shared/huidong/BMI_project/brca_data/Tumor_preds_intp",
+			    "/data07/shared/huidong/BMI_project/brca_data/Tumor_preds_intp"]
+	},
+	"TIL_preds": {
+	    "root_path": "/data04/shared/shahira/TIL_heatmaps/BRCA/vgg_mix_prob/heatmap_txt",
+	    "output_path": ["/data02/shared/huidong/BMI_project/brca_data/TIL_preds_intp",
+			    "/data04/shared/huidong/BMI_project/brca_data/TIL_preds_intp",
+			    "/data07/shared/huidong/BMI_project/brca_data/TIL_preds_intp"]
+	},
+	"label_file": "/home/huidong/projects/BMI_projects/micnn_survival_rate/datasets/dataset_for_survival.csv"
+    },
+    
+    "data_loader": {
+	"batch_size": 32,
+	"shuffle": true,
+	"num_workers": 32,
+	"drop_last": false
+    },
+
+    "train_ratio": 0.8,
+    "scales": [1, 4],
+    "use_rgb_only": false,
+    "intermediate": "/data02/shared/huidong/BMI_project/micnn_survival_rate/intermediate",
+    
+    "patchcnn_em": {
+	"n_rounds": 100,
+	"patch_size": [224, 224],
+	
+	"m_step": {
+	    "n_epochs": 2,
+	    "beta1": 0.5,
+	    "beta2": 0.999,
+	    "output_dir": "",
+	    "verbose": 1,
+	    "log_every_iters": 10,
+	    "eval_every_iters": 100,
+	    "eval_every_epochs": 1,
+	    "save_model_every_epochs": 1,
+	    "save_model_every_iters": 100,
+	    "optimizer": {
+		"type": "Adam",
+		"args": {
+		    "lr": 1e-4,
+		    "weight_decay": 0,
+		    "amsgrad": false
+		}
+	    },
+	    "model_arch": {
+		"type": "resnet50",
+		"args": {
+		    "in_nc": 6,
+		    "num_classes": 2,
+		    "pretrained": false
+		}
+	    }
+	},
+	"e_step": {
+	    "smooth_sigma": 3,
+	    "seg_quantile": 0.5
+	}	
+    },
+    
+    "wsi_cls": {
+	"kernel": "rbf",
+	"Cs": [1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1e0, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9],
+	"gammas": [1e-9, 1e-8, 1e-7, 1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1e0, 1e1, 1e2, 1e3, 1e4, 1e5]
+    }
+}

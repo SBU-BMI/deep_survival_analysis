@@ -1,0 +1,53 @@
+{
+    "tile_process": {
+        "tile_size": [4000, 4000],
+        "WSIs": {
+            "root_path": "/data03/tcga_data/tumor/brca",
+            "output_path": "/data03/shared/huidong/BMI_project/brca_data/WSIs_patches"
+        },
+        "Nuclei_segs": {
+            "root_path": "/data02/shared/tcga_analysis/brca_analysis/brca_prob",
+            "output_path": "/data02/shared/huidong/BMI_project/brca_data_uint8/Nuclei_segs/brca_prob"
+        },
+        "Tumor_preds": {
+            "root_path": "/data01/shared/hanle/tumor_project/pub_tumor_cancer_brca/Cancer_heatmap_tcga_seer_v1",
+            "output_path": ["/data02/shared/huidong/BMI_project/brca_data_uint8/Tumor_preds_intp",
+                            "/data04/shared/huidong/BMI_project/brca_data_uint8/Tumor_preds_intp",
+                            "/data07/shared/huidong/BMI_project/brca_data_uint8/Tumor_preds_intp"]
+        },
+        "TIL_preds": {
+            "root_path": "/data04/shared/shahira/TIL_heatmaps/BRCA/vgg_mix_prob/heatmap_txt",
+            "output_path": ["/data02/shared/huidong/BMI_project/brca_data_uint8/TIL_preds_intp",
+                            "/data04/shared/huidong/BMI_project/brca_data_uint8/TIL_preds_intp",
+                            "/data07/shared/huidong/BMI_project/brca_data_uint8/TIL_preds_intp"]
+        },
+        "label_file": "/home/huidong/projects/BMI_projects/micnn_survival_rate/datasets/dataset_for_survival.csv"
+    },
+    
+    "dataset": {
+	"data_root": "/data02/shared/huidong/BMI_project/micnn_survival_rate/intermediate/cnn_root/patch_size_224_224_scale_1/images_prob_sampling",
+	"input_nc": 6,
+	"data_part": 2,
+	"data_file_path": "/home/huidong/projects/BMI_projects/clinic_prediction_gen_sample_patches/datasets",
+	"n_patches_per_wsi": 16,
+	"n_patches_per_wsi_eval": 1024,
+	"interval": 750,
+	"n_intervals": 5,
+	"batch_size": 16,
+	"num_workers": 32,
+	"mask_root": "/data02/shared/huidong/BMI_project/micnn_survival_rate3/intermediate/mask_root"
+    },
+
+    "train": {
+	"n_epochs": 3000,
+	"learning_rate": 1e-4,
+	"output_dir": "/data02/shared/huidong/BMI_project/survival_pred_cce_dls_aggfeat",
+	"log_freq": 1,
+	"save_freq": 50
+    },
+
+    "valid": {
+	"valid_freq": 100
+    }
+
+}
