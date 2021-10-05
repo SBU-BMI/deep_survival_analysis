@@ -27,20 +27,21 @@
     "dataset": {
 	"data_root": "/data02/shared/huidong/BMI_project/micnn_survival_rate/intermediate/cnn_root/patch_size_224_224_scale_1/images_prob_sampling",
 	"input_nc": 6,
-	"csv_file_path": "/scratch/KurcGroup/huidong/BMI_projects/clinic_prediction_dls/datasets/dataset_for_survival.csv",
+	"data_part": 3,
+	"data_file_path": "/scratch/KurcGroup/huidong/BMI_projects/clinic_prediction_dls/datasets",
 	"n_patches_per_wsi": 16,
 	"n_patches_per_wsi_eval": 1024,
 	"interval": 750,
 	"n_intervals": 5,
 	"batch_size": 16,
-	"num_workers": 32,
-	"mask_root": "/data02/shared/huidong/BMI_project/micnn_survival_rate3/intermediate/mask_root "
+	"num_workers": 64,
+	"mask_root": "/gpfs/scratch/huidliu/disk/huidong/BMI_projects/micnn_survival_rate3/intermediate/mask_root"
     },
 
     "train": {
 	"n_epochs": 3000,
 	"learning_rate": 1e-4,
-	"output_dir": "/data02/shared/huidong/BMI_project/survival_pred_cce_dls",
+	"output_dir": "/gpfs/scratch/huidliu/disk/huidong/BMI_projects/survival_pred_cce_dls_w_s16_3",
 	"log_freq": 1,
 	"save_freq": 50
     },

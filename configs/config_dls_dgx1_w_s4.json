@@ -34,14 +34,14 @@
 	"interval": 750,
 	"n_intervals": 5,
 	"batch_size": 16,
-	"num_workers": 128,
+	"num_workers": 64,
 	"mask_root": "/gpfs/scratch/huidliu/disk/huidong/BMI_projects/micnn_survival_rate3/intermediate/mask_root"
     },
 
     "train": {
 	"n_epochs": 3000,
 	"learning_rate": 1e-4,
-	"output_dir": "/gpfs/scratch/huidliu/disk/huidong/BMI_projects/survival_pred_cce_dls",
+	"output_dir": "/gpfs/scratch/huidliu/disk/huidong/BMI_projects/survival_pred_cce_dls_w_s4",
 	"log_freq": 1,
 	"save_freq": 50
     },

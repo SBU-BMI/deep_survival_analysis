@@ -14,9 +14,18 @@ import loss.censored_crossentropy_loss as cce_loss
 from utils import ensure_dir
 
 
-def load_last_model(model_path, net, ch):
-    models = glob('{}/*_{}.pth'.format(model_path, ch))
-    model_ids = [(int(f.split('_')[2]), f) for f in [p.split('/')[-1].split('.')[0] for p in models]]
+def load_last_model(model_path, net, ch, epoch=-1):
+    if epoch > 0:
+        models = glob('{}/*_{}_{}.pth'.format(model_path, epoch, ch))
+        model_ids = [(int(f.split('_')[2]), f) for f in [p.split('/')[-1].split('.')[0] for p in models]]
+        if not model_ids:
+            print('no models at epoch {}, load models at last epoch.'.format(epoch))
+            models = glob('{}/*_{}.pth'.format(model_path, ch))
+            model_ids = [(int(f.split('_')[2]), f) for f in [p.split('/')[-1].split('.')[0] for p in models]]
+    else:
+        models = glob('{}/*_{}.pth'.format(model_path, ch))
+        model_ids = [(int(f.split('_')[2]), f) for f in [p.split('/')[-1].split('.')[0] for p in models]]
+        
     if not model_ids:
         print('No net loaded!')
         epoch = -1
@@ -25,7 +34,7 @@ def load_last_model(model_path, net, ch):
         net.load_state_dict(torch.load('{}/{}.pth'.format(
             model_path, fn))
         )
-        print('{}.pth for patch classification loaded!'.format(fn))
+        print('{}.pth loaded!'.format(fn))
 
     return net, epoch
 
@@ -58,6 +67,7 @@ def eval(args, config, device):
     n_repetitions = n_patches_wsi // n_patches
     mode = args.mode
     ch = args.ch
+    epoch = int(args.epoch)
     feat_level = args.feat_level
     csv_file_path = '{}/dataset_for_survival.csv'.format(data_file_path)
 
@@ -110,7 +120,7 @@ def eval(args, config, device):
     model = model.to(device)
     
     ckpt_dir = '{}/checkpoints'.format(output_dir)
-    model, epoch = load_last_model(ckpt_dir, model, ch)
+    model, epoch = load_last_model(ckpt_dir, model, ch, epoch)
     model.eval()
 
     feat_dir = '{}/feat_dir/epoch_{}/{}'.format(output_dir, epoch, mode)
@@ -160,6 +170,8 @@ if __name__ == '__main__':
                         help='feature level: [fc | out] (default: out)')
     parser.add_argument('--ch', default='rgb', type=str,
                         help='data channel: [rgb | pred] (default: rgb)')
+    parser.add_argument('--epoch', default=-1, type=int,
+                        help='model epoch')
     parser.add_argument('-d', '--gpu_ids', default='0', type=str,
                            help='indices of GPUs to enable (default: 0)')
     

@@ -125,14 +125,14 @@ def train(args, config, device):
     )
     '''
 
-    uncensored_train_hist = np.load('{}/dataset_info/uncensored_train_hist.npy'.format(data_file_path))
-    censored_train_hist = np.load('{}/dataset_info/censored_train_hist.npy'.format(data_file_path))
+    # uncensored_train_hist = np.load('{}/dataset_info/uncensored_train_hist.npy'.format(data_file_path))
+    # censored_train_hist = np.load('{}/dataset_info/censored_train_hist.npy'.format(data_file_path))
 
-    n_uncensored = np.sum(uncensored_train_hist)
-    n_censored = np.sum(censored_train_hist)
+    # n_uncensored = np.sum(uncensored_train_hist)
+    # n_censored = np.sum(censored_train_hist)
 
     w_unc = torch.tensor(1.0).to(device)
-    w_c = torch.tensor(args.balanced_weight * n_uncensored / (n_uncensored + n_censored)).to(device)
+    w_c = torch.tensor(1.0).to(device)
 
     if data_part == 1 or data_part == 3:
         model = mobilenet.mobilenet_v2(pretrained=False, progress=True, input_nc=3, num_classes=n_intervals)
@@ -260,7 +260,7 @@ if __name__ == '__main__':
                            help='config file path (default: None)')
     parser.add_argument('-s', '--scale', default=1, type=int,
                            help='scale (default: 1)')
-    parser.add_argument('-w', '--balanced_weight', default=0.5, type=float,
+    parser.add_argument('-w', '--balanced_weight', default=1.0, type=float,
                         help='balanced weight between uncensored and censored data')
     parser.add_argument('-d', '--gpu_ids', default='0', type=str,
                            help='indices of GPUs to enable (default: 0)')

@@ -356,13 +356,21 @@ class Patch_Data(data.Dataset):
                 patch_01, _, _, _, _ = self._load_cat_data(wsi_id, txy_01, pxy_01, self.data_part)
                 patch_10, _, _, _, _ = self._load_cat_data(wsi_id, txy_10, pxy_10, self.data_part)
                 patch_11, _, _, _, _ = self._load_cat_data(wsi_id, txy_11, pxy_11, self.data_part)
-                patch_0 = np.concatenate((patch_00, patch_01), axis=2)
-                patch_1 = np.concatenate((patch_10, patch_11), axis=2)
-                patch = np.concatenate((patch_0, patch_1), axis=1)
+                try:
+                    patch_0 = np.concatenate((patch_00, patch_01), axis=2)
+                    patch_1 = np.concatenate((patch_10, patch_11), axis=2)
+                    patch = np.concatenate((patch_0, patch_1), axis=1)
+                except:
+                    import pdb
+                    pdb.set_trace()
             else:
                 raise NotImplementedError
 
-            patch = patch[:, ::self.scale, ::self.scale]  # down-size retrieved patch
+            try:
+                patch = patch[:, ::self.scale, ::self.scale]  # down-size retrieved patch
+            except:
+                import pdb
+                pdb.set_trace()
             patch = (torch.from_numpy(patch).float() - 0.5) / 0.5  # self.transform(patch)
             if self.rgb_only:
                 imgs[idx] = patch

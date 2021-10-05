@@ -1,2 +1,2 @@
-# deep_survival_analysis
-Survival analysis with deep learning 
+# clinic_prediction_dls
+clinic_prediction_dls
