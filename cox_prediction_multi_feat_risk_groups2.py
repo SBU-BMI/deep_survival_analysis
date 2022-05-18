@@ -4,9 +4,11 @@ import argparse
 
 import numpy as np
 from sklearn.decomposition import PCA
+import matplotlib.pyplot as plt
 import pandas as pd
 import csv
-from lifelines import CoxPHFitter
+from lifelines import CoxPHFitter, KaplanMeierFitter
+from lifelines.statistics import logrank_test
 
 
 def array2dataframe(A, names):
@@ -71,6 +73,18 @@ def load_feat_multi_feat(data_info, mode='train'):
 
     dim_list.insert(0, 0)
     dims = np.cumsum(dim_list)
+
+    # compute risk score
+    risk_scores = np.zeros((n_wsi,))
+    loc_val = np.zeros((dims[-1],))
+    for j in range(n_data_info):
+        loc_val[dims[j]:dims[j+1]] = range(1, dims[j+1] - dims[j] + 1)
+
+    for i in range(n_wsi):
+        score = 0
+        for j in range(n_data_info):
+            score += np.sum(feat[i, dims[j]:dims[j+1]] * loc_val[dims[j]:dims[j+1]])
+        risk_scores[i] = -score
     
     if mode == 'train':
         for i in range(n_data_info):
@@ -101,7 +115,7 @@ def load_feat_multi_feat(data_info, mode='train'):
             else:
                 feat_ = np.concatenate((feat_, feat_i), axis=1)
 
-    return wsi_id_list, feat_, data_info
+    return wsi_id_list, feat_, data_info, risk_scores
 
 
 def get_pca_model(ratio=0.0):
@@ -114,14 +128,15 @@ def get_pca_model(ratio=0.0):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--penalizer', type=float, default=0.1, help='L2 penalizer')
+    parser.add_argument('--penalizer', type=float, default=1., help='L2 penalizer')
 
     args = parser.parse_args()
     penalizer = float(args.penalizer)
     survival_info = './datasets/dataset_for_survival.csv'
-
+    
     data_info = dict()
     global_pca = 0.0
+
     data_info['pca_ratio'] = [0.9, 0.9] 
 
     data_info['train'] = [
@@ -145,8 +160,8 @@ if __name__ == '__main__':
     else:
         global_pca_model = None
 
-    train_wsi_id_list, train_feat, data_info = load_feat_multi_feat(data_info, mode='train')
-    test_wsi_id_list, test_feat, data_info = load_feat_multi_feat(data_info, mode='test')
+    train_wsi_id_list, train_feat, data_info, train_risk_scores = load_feat_multi_feat(data_info, mode='train')
+    test_wsi_id_list, test_feat, data_info, test_risk_scores = load_feat_multi_feat(data_info, mode='test')
     
     if global_pca_model is not None:
         global_pca_model.fit(train_feat)
@@ -178,9 +193,97 @@ if __name__ == '__main__':
     cph.fit(train_data_df, duration_col="days", event_col="censor")
     cph.print_summary()
 
+    '''
     print('concordance_index for training data')
     print(cph.score(train_data_df, scoring_method="concordance_index"))
     print('concordance_index for testing data')
     print(cph.score(test_data_df, scoring_method="concordance_index"))
+    '''
+    # te = cph.predict_expectation(test_data_df)
+    tr = cph.predict_expectation(train_data_df)
+    te = cph.predict_expectation(test_data_df)
+    tr_med = tr.median()
     
+    ##################### risk groups ####################################
 
+    # risk_scores = test_risk_scores
+    data = test_data
+    # risk_scores = train_risk_scores
+    # data = train_data
+
+    if True:
+        tr_np = tr.to_numpy()
+        te_np = te.to_numpy()
+        th_25 = np.percentile(tr_np, 25)
+        th_75 = np.percentile(tr_np, 75)
+
+        low_risk = data[te_np > th_75, :]
+        medium_risk = data[np.logical_and(th_25 < te_np, te_np <= th_75), :]
+        high_risk = data[th_25 >= te_np, :]
+
+        low_risk_df = array2dataframe(low_risk, names)
+        medium_risk_df = array2dataframe(medium_risk, names)
+        high_risk_df = array2dataframe(high_risk, names)
+
+        kmf_low = KaplanMeierFitter()
+        kmf_medium = KaplanMeierFitter()
+        kmf_high = KaplanMeierFitter()
+
+        kmf_low.fit(durations = low_risk_df["days"], event_observed = low_risk_df["censor"], label = "Low Risk")
+        kmf_medium.fit(durations = medium_risk_df["days"], event_observed = medium_risk_df["censor"], label = "Medium Risk")
+        kmf_high.fit(durations = high_risk_df["days"], event_observed = high_risk_df["censor"], label = "High Risk")
+
+        T = low_risk_df["days"]
+        E = low_risk_df["censor"]
+        T1 = high_risk_df["days"]
+        E1 = high_risk_df["censor"]
+        results = logrank_test(T, T1, event_observed_A=E, event_observed_B=E1)
+        results.print_summary()
+
+        kmf_low.plot()
+        kmf_medium.plot()
+        kmf_high.plot()
+
+        plt.xlabel("days")
+        plt.ylabel("Survival probability")
+        plt.title("logrank test $p$ < 0.005")
+        plt.savefig("dls_v2_3groups_2.png")
+
+        plt.show()
+
+
+    if False:
+        # th_50 = np.percentile(risk_scores, 50)
+
+        low_risk = data[te > tr_med]
+        high_risk = data[te <= tr_med]
+        # low_risk = data[risk_scores >= th_50, :]
+        # high_risk = data[th_50 > risk_scores, :]
+
+        low_risk_df = array2dataframe(low_risk, names)
+        high_risk_df = array2dataframe(high_risk, names)
+
+        kmf_low = KaplanMeierFitter()
+        kmf_high = KaplanMeierFitter()
+
+        kmf_low.fit(durations = low_risk_df["days"], event_observed = low_risk_df["censor"], label = "Low Risk")
+        kmf_high.fit(durations = high_risk_df["days"], event_observed = high_risk_df["censor"], label = "High Risk")
+
+        T = low_risk_df["days"]
+        E = low_risk_df["censor"]
+        T1 = high_risk_df["days"]
+        E1 = high_risk_df["censor"]
+        results = logrank_test(T, T1, event_observed_A=E, event_observed_B=E1)
+        results.print_summary()
+
+        kmf_low.plot()
+        kmf_high.plot()
+
+        plt.xlabel("days")
+        plt.ylabel("Survival probability")
+        plt.title("logrank test $p$ = 0.01")
+
+        plt.savefig("dls_v2_2groups_2.png")
+        plt.show()    
+
+        

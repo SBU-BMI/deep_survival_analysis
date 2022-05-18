@@ -7,6 +7,84 @@ from sklearn.decomposition import PCA
 import pandas as pd
 import csv
 from lifelines import CoxPHFitter
+from lifelines.utils import concordance_index
+
+import warnings
+warnings.filterwarnings('ignore')
+
+
+def create_bootstrap_data(df, n = 100):
+    """
+    Given a df, create n (default = 100) bootstraps resamples.
+    returns an array with the indexes (samples x n)
+    """
+    bt_indexes = np.random.choice(df.index, (len(df.index), n), replace = True)
+    return bt_indexes
+
+
+def compute_bootstrapped_cindexes(df, duration_col, event_col, n, penalizer):
+
+    df2 = df.copy()
+    df2 = df2.reset_index(drop = True)
+
+    indexes = create_bootstrap_data(df = df2, n = n)
+    index_all = set(df2.index)
+
+    cindexes_fitted = []
+    cindexes_test_oob = []
+    cindexes_test_optimism = []
+    cindexes_train_red = []
+    cindexes_train_bs = []
+    HRs = []
+
+    for i in range(n):
+
+        # Create a model and fit to the bootstrap
+        cph = CoxPHFitter(penalizer=penalizer)
+        cph.fit(df = df2.loc[indexes[:,i],:], duration_col = duration_col, 
+                event_col = event_col)
+
+        #Append the c-index from the fitted model
+        cindexes_fitted.append(cph.concordance_index_)
+
+        #Compute the cindex on different set of samples
+        index_i = set(indexes[:,i])
+        index_test = index_all.difference(index_i)
+
+        # Test on the out-of-bag samples
+        pred = -cph.predict_partial_hazard(df2.loc[index_test,:])
+        cindex_test = concordance_index(df2.loc[index_test,:][duration_col], pred, df2.loc[index_test,:][event_col])
+        cindexes_test_oob.append(cindex_test)
+
+        # Test on the original sample for optimism
+        pred = -cph.predict_partial_hazard(df2)
+        cindex_test = concordance_index(df2[duration_col], pred, df2[event_col])
+        cindexes_test_optimism.append(cindex_test)
+
+        # Check the c-index on the "set" of training samples removing duplicates
+        pred = -cph.predict_partial_hazard(df2.loc[index_i,:])
+        cindex_train = concordance_index(df2.loc[index_i,:][duration_col], pred, df2.loc[index_i,:][event_col])
+        cindexes_train_red.append(cindex_train)
+
+        # Recompute the c-index on the train sample using concordance_index
+        pred = -cph.predict_partial_hazard(df2.loc[indexes[:,i],:])
+        cindex_train = concordance_index(df2.loc[indexes[:,i],:][duration_col], pred, df2.loc[indexes[:,i],:][event_col])
+        cindexes_train_bs.append(cindex_train)
+
+        hr = cph.hazard_ratios_[cph._compute_p_values().argmin()]
+        HRs.append(hr)
+
+    low_idx = int(n * 0.025)
+    high_idx = max(int(n * 0.975), n - 1)
+    cindexes_test_oob = sorted(cindexes_test_oob)
+    HRs = sorted(HRs)
+    print('Train c-index (extracted from the model): {:3.3f} +- {:3.3f}'.format(np.mean(cindexes_fitted),np.std(cindexes_fitted)))
+    print('Train c-index (recalculated using concordance_index): {:3.3f} +- {:3.3f}'.format(np.mean(cindexes_train_bs),np.std(cindexes_train_bs)))
+    print('Train c-index (computed only on set of train samples): {:3.3f} +- {:3.3f}'.format(np.mean(cindexes_train_red),np.std(cindexes_train_red)))
+    print('Test c-index (computed on the original data for optimism): {:3.3f} +- {:3.3f}'.format(np.mean(cindexes_test_optimism),np.std(cindexes_test_optimism)))
+    print('Test c-index (computed only on out-of-bag samples): {:3.3f} +- {:3.3f}'.format(np.mean(cindexes_test_oob),np.std(cindexes_test_oob)))
+    print('Test c-index (computed only on out-of-bag samples): {:3.3f} +- {:3.3f}, 95\% confidence interval: ({:3.3f}, {:3.3f})'.format(np.mean(cindexes_test_oob), np.std(cindexes_test_oob), cindexes_test_oob[low_idx], cindexes_test_oob[high_idx]))
+    print('Test HR (computed only on out-of-bag samples): {:3.3f} +- {:3.3f}, 95\% confidence interval: ({:3.3f}, {:3.3f})'.format(np.mean(HRs), np.std(HRs), HRs[low_idx], HRs[high_idx]))
 
 
 def array2dataframe(A, names):
@@ -115,6 +193,7 @@ def get_pca_model(ratio=0.0):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--penalizer', type=float, default=0.1, help='L2 penalizer')
+    parser.add_argument('--n', type=int, default=1000, help='Number of bootstrap samples (default: 1000)')
 
     args = parser.parse_args()
     penalizer = float(args.penalizer)
@@ -123,6 +202,7 @@ if __name__ == '__main__':
     data_info = dict()
     global_pca = 0.0
     data_info['pca_ratio'] = [0.9, 0.9] 
+
 
     data_info['train'] = [
                           ['/gpfs/scratch/huidliu/disk/huidong/BMI_projects/survival_pred_cce_dls_w_s8/epoch_1000/train', 'feat_level_out_rgb.npy'],
@@ -167,20 +247,17 @@ if __name__ == '__main__':
 
     train_data = np.concatenate((train_feat, train_wsi_labels), axis=1)
     test_data = np.concatenate((test_feat, test_wsi_labels), axis=1)
+
+    data = np.concatenate((train_data, test_data), axis=0)
     names = ['name_{}'.format(idx) for idx in range(dim)]
     names += ['censor', 'days']
 
-    train_data_df = array2dataframe(train_data, names)
-    test_data_df = array2dataframe(test_data, names)
+    data_df = array2dataframe(data, names)
 
-    ###################### train cox model ################################
-    cph = CoxPHFitter(penalizer=penalizer)
-    cph.fit(train_data_df, duration_col="days", event_col="censor")
-    cph.print_summary()
+    n = args.n 
+    duration_col = 'days'
+    event_col = 'censor'
 
-    print('concordance_index for training data')
-    print(cph.score(train_data_df, scoring_method="concordance_index"))
-    print('concordance_index for testing data')
-    print(cph.score(test_data_df, scoring_method="concordance_index"))
+    compute_bootstrapped_cindexes(data_df, duration_col, event_col, n, penalizer)
     
 

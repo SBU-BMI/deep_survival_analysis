@@ -129,6 +129,11 @@ if __name__ == '__main__':
                           ['/gpfs/scratch/huidliu/disk/huidong/BMI_projects/survival_pred_cce_dls_w_s8/epoch_1000/train', 'feat_level_out_pred.npy'],
     ]
 
+    data_info['valid'] = [
+                          ['/gpfs/scratch/huidliu/disk/huidong/BMI_projects/survival_pred_cce_dls_w_s8/epoch_1000/valid', 'feat_level_out_rgb.npy'],
+                          ['/gpfs/scratch/huidliu/disk/huidong/BMI_projects/survival_pred_cce_dls_w_s8/epoch_1000/valid', 'feat_level_out_pred.npy'],
+    ]
+    
     data_info['test'] = [
                          ['/gpfs/scratch/huidliu/disk/huidong/BMI_projects/survival_pred_cce_dls_w_s8/epoch_1000/test', 'feat_level_out_rgb.npy'],
                          ['/gpfs/scratch/huidliu/disk/huidong/BMI_projects/survival_pred_cce_dls_w_s8/epoch_1000/test', 'feat_level_out_pred.npy'],
@@ -146,41 +151,67 @@ if __name__ == '__main__':
         global_pca_model = None
 
     train_wsi_id_list, train_feat, data_info = load_feat_multi_feat(data_info, mode='train')
+    valid_wsi_id_list, valid_feat, data_info = load_feat_multi_feat(data_info, mode='valid')
     test_wsi_id_list, test_feat, data_info = load_feat_multi_feat(data_info, mode='test')
     
     if global_pca_model is not None:
         global_pca_model.fit(train_feat)
         train_feat = global_pca_model.transform(train_feat)
+        valid_feat = global_pca_model.transform(valid_feat)
         test_feat = global_pca_model.transform(test_feat)
     
     n_train, dim = train_feat.shape
+    n_valid = valid_feat.shape[0]
     n_test = test_feat.shape[0]
     wsi_labels = get_wsi_id_labels(survival_info)
     train_wsi_labels = np.zeros((n_train, 2), dtype=train_feat.dtype)
+    valid_wsi_labels = np.zeros((n_valid, 2), dtype=valid_feat.dtype)
     test_wsi_labels = np.zeros((n_test, 2), dtype=test_feat.dtype)
 
     for idx, wsi_id in enumerate(train_wsi_id_list):
         train_wsi_labels[idx] = wsi_labels[wsi_id]
 
+    for idx, wsi_id in enumerate(valid_wsi_id_list):
+        valid_wsi_labels[idx] = wsi_labels[wsi_id]
+
     for idx, wsi_id in enumerate(test_wsi_id_list):
         test_wsi_labels[idx] = wsi_labels[wsi_id]
 
     train_data = np.concatenate((train_feat, train_wsi_labels), axis=1)
+    valid_data = np.concatenate((valid_feat, valid_wsi_labels), axis=1)
     test_data = np.concatenate((test_feat, test_wsi_labels), axis=1)
     names = ['name_{}'.format(idx) for idx in range(dim)]
     names += ['censor', 'days']
 
     train_data_df = array2dataframe(train_data, names)
+    valid_data_df = array2dataframe(valid_data, names)
     test_data_df = array2dataframe(test_data, names)
 
     ###################### train cox model ################################
-    cph = CoxPHFitter(penalizer=penalizer)
-    cph.fit(train_data_df, duration_col="days", event_col="censor")
-    cph.print_summary()
 
-    print('concordance_index for training data')
-    print(cph.score(train_data_df, scoring_method="concordance_index"))
-    print('concordance_index for testing data')
-    print(cph.score(test_data_df, scoring_method="concordance_index"))
+    penalizer_list = [10**v for v in range(-8, 8)]
+    l1_ratio_list = [0.1*v for v in range(11)]
+
+    max_c_index = 0
+    max_penalizer = -1
+    max_l1_ratio = -1
+    for penalizer in penalizer_list:
+        for l1_ratio in l1_ratio_list:
+            cph = CoxPHFitter(penalizer=penalizer, l1_ratio=l1_ratio)
+            cph.fit(train_data_df, duration_col="days", event_col="censor")
+            cur_c_index = cph.score(valid_data_df, scoring_method="concordance_index")
+            if cur_c_index > max_c_index:
+                max_c_index = cur_c_index
+                max_penalizer = penalizer
+                max_l1_ratio = l1_ratio
+                print('validation set, max c-index {}, penalizer {}, l1_ratio {}'.format(max_c_index, max_penalizer, max_l1_ratio))
+
+    cph = CoxPHFitter(penalizer=max_penalizer, l1_ratio=max_l1_ratio)
+    cph.fit(train_data_df, duration_col="days", event_col="censor")
+    train_c_index = cph.score(train_data_df, scoring_method="concordance_index")
+    valid_c_index = cph.score(valid_data_df, scoring_method="concordance_index")
+    test_c_index = cph.score(test_data_df, scoring_method="concordance_index")
+
+    print('penalizer {}, l1_ratio {}, train c-index {}, validation c-index {}, test c-index {}'.format(max_penalizer, max_l1_ratio, train_c_index, valid_c_index, test_c_index))
     
 
