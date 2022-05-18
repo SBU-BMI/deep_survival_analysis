@@ -10,6 +10,12 @@ def ensure_dir(path):
         os.makedirs(path)
 
 
+def unique(L):
+    used = []
+    [used.append(x) for x in L if x not in used]
+    return used
+
+
 def get_tile_xy_in_fn(file_path):
     fn_base = file_path.split('/')[-1].split('.')[0]
     x, y = fn_base.split('_')[:2]
