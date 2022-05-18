@@ -10,7 +10,6 @@ import torch.optim as optim
 import torchvision.transforms as transforms
 
 import datasets.wsi_dataset_ml_train as wsi_dataset
-import data_preprocess.data_preprocess as data_preprocess
 import models.mobilenet as mobilenet
 import loss.censored_crossentropy_loss as cce_loss
 from utils import ensure_dir
@@ -77,11 +76,6 @@ def train(args, config, device):
     save_freq = config['train']['save_freq']
     valid_freq = config['valid']['valid_freq']
 
-    label_file = config['tile_process']['label_file']
-    patch_size = config['dataset']['patch_size']
-    tile_size = config['tile_process']['tile_size']
-    max_num_patches = config['dataset']['max_num_patches']
-
     transform = transforms.Compose([
         transforms.ToTensor(),
         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
@@ -89,12 +83,8 @@ def train(args, config, device):
 
     _6c = input_nc > 3
     rgb_only = not _6c
-
-    if args.fg:
-        fg_mask = data_preprocess.FG_Mask(wsi_root, mask_root, label_file, args.scale, patch_size, tile_size, max_num_patches)
-        ncores = 10  # number of CPUs to compute the foreground mask
-        fg_mask.compute_fg_parallel(ncores)
-    
+    # train_set = wsi_dataset.WSI_Dataset(data_root, csv_file_path, input_nc, transform, 'train', n_patches, interval, n_intervals)
+    # valid_set = wsi_dataset(data_root, csv_file_path, input_nc, transform, 'valid', n_patches, interval, n_intervals)
     train_set = wsi_dataset.Patch_Data(
         wsi_root=wsi_root,
         nu_seg_root=nu_seg_root,
@@ -114,14 +104,26 @@ def train(args, config, device):
 
     train_set.set_scale(args.scale)
     train_set.set_round_no(0)
+
+    # num_workers = 2  # for debug
     
     train_loader = torch.utils.data.DataLoader(
         train_set,
         batch_size=1,
         shuffle=True,
-        num_workers=num_workers,  
+        num_workers=num_workers,  # for debug
         drop_last=False
-    )    
+    )
+    
+    '''
+    valid_loader = torch.utils.data.DataLoader(
+        valid_set,
+        batch_size=1,
+        shuffle=False,
+        num_workers=num_workers,
+        drop_last=False
+    )
+    '''
 
     uncensored_train_hist = np.load('{}/dataset_info/uncensored_train_hist.npy'.format(data_file_path))
     censored_train_hist = np.load('{}/dataset_info/censored_train_hist.npy'.format(data_file_path))
@@ -167,14 +169,12 @@ def train(args, config, device):
     if data_part == 1 or data_part == 3:
         model_params = filter(lambda p: p.requires_grad, model.parameters())
         optimizer = optim.RMSprop(model_params, lr=lr)
-        # criterion = cce_loss.CensoredCrossEntropyLoss()
-        criterion = nn.BCEWithLogitsLoss()
+        criterion = cce_loss.CensoredCrossEntropyLoss()
 
     if data_part == 2 or data_part == 3:
         model_pred_params = filter(lambda p: p.requires_grad, model_pred.parameters())
         optimizer_pred = optim.RMSprop(model_pred_params, lr=lr)
-        # criterion_pred = cce_loss.CensoredCrossEntropyLoss()
-        criterion_pred = nn.BCEWithLogitsLoss()
+        criterion_pred = cce_loss.CensoredCrossEntropyLoss()
 
     if data_part == 1 or data_part == 3:
         model.train()
@@ -201,9 +201,9 @@ def train(args, config, device):
                 optimizer.zero_grad()
                 output = model(imgs)
                 if obs[0].item() == 1:
-                    loss = w_unc * criterion(output, label)
+                    loss = w_unc * criterion(output, y, obs)
                 else:
-                    loss = w_c * criterion(output, label)
+                    loss = w_c * criterion(output, y, obs)
                 loss.backward()
                 optimizer.step()
                 running_loss += loss.item()
@@ -211,9 +211,9 @@ def train(args, config, device):
                 optimizer_pred.zero_grad()
                 output_pred = model_pred(preds)
                 if obs[0].item() == 1:
-                    loss_pred = w_unc * criterion_pred(output_pred, label)
+                    loss_pred = w_unc * criterion_pred(output_pred, y, obs)
                 else:
-                    loss_pred = w_c * criterion_pred(output_pred, label)
+                    loss_pred = w_c * criterion_pred(output_pred, y, obs)
                 loss_pred.backward()
                 optimizer_pred.step()
                 running_loss_pred += loss_pred.item()
@@ -244,17 +244,24 @@ def train(args, config, device):
             if data_part == 2 or data_part == 3:
                 torch.save(model_pred.state_dict(), '{}/model_epoch_{}_pred.pth'.format(ckpt_dir, epoch))
 
+        if False:  # epoch % valid_freq == 0:
+            model.eval()
+            for idx, data in enumerate(valid_loader, 0):
+                imgs, y, obs = data
+                imgs = imgs[0]
+                output = model(imgs)
+
+            model.train()
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='PyTorch MICNN')
     parser.add_argument('-c', '--config', default=None, type=str,
                            help='config file path (default: None)')
-    parser.add_argument('--fg', action='store_true', default=False,
-                        help='compute foreground mask of WSIs (default: False)')
     parser.add_argument('-s', '--scale', default=1, type=int,
                            help='scale (default: 1)')
     parser.add_argument('-w', '--balanced_weight', default=0.5, type=float,
-                        help='balanced weight between uncensored and censored data (default: 0.5)')
+                        help='balanced weight between uncensored and censored data')
     parser.add_argument('-d', '--gpu_ids', default='0', type=str,
                            help='indices of GPUs to enable (default: 0)')
     
